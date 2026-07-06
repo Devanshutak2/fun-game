@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>FUN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="logo">F<span>U</span>N</div>
+    <div class="stat">SCORE <b id="score">0</b> &nbsp;·&nbsp; Q <b id="qnum">1</b>/<b id="qtotal">8</b></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="card" id="card">
+      <div class="eyebrow">Catch the truth</div>
+      <div class="question" id="question">Loading...</div>
+      <div class="timerTrack"><div class="timerFill" id="timerFill"></div></div>
+    </div>
+
+    <button class="btn btn-yes" id="btnYes">YES</button>
+    <button class="btn btn-no" id="btnNo">NO</button>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <div class="flash" id="flash"></div>
+
+  <div class="overlay" id="startOverlay">
+    <h1><span class="f">F</span><span class="u">U</span><span class="n">N</span></h1>
+    <p>A quiz where the right answer doesn't want to be caught.</p>
+    <div class="rules">
+      <b>How to play</b><br>
+      · Each question has one true answer.<br>
+      · The <b>correct</b> button bolts around the screen — chase it down.<br>
+      · The <b>wrong</b> button sits still, tempting you. Clicking it doesn't count.<br>
+      · Catch the runner before you run out of patience.
+    </div>
+    <button class="cta" id="startBtn">START</button>
+  </div>
+
+  <div class="overlay hidden" id="endOverlay">
+    <h1><span class="f">D</span><span class="u">O</span><span class="n">NE</span></h1>
+    <div class="final-score">You caught <b id="finalScore">0</b> / <span id="finalTotal">8</span> truths</div>
+    <div class="rules" id="leaderboardBox">
+      <b>Leaderboard (this session)</b>
+      <div id="leaderboardList" style="margin-top:8px;"></div>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center; margin-bottom:20px;">
+      <input id="nameInput" maxlength="12" placeholder="your name">
+      <button class="cta" id="saveScoreBtn">SAVE</button>
+    </div>
+    <button class="cta" id="restartBtn">PLAY AGAIN</button>
+  </div>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
