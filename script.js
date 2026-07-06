@@ -3,8 +3,6 @@
 // ============================================================
 
 // ---- 1. Question data ----
-// Each question has one correct answer (true = Yes, false = No).
-// The button matching `a` becomes the "runner" that dodges the cursor.
 const questions = [
   { q: "Is the sky blue on a clear day?", a: true },
   { q: "Can a square have five sides?", a: false },
@@ -17,13 +15,13 @@ const questions = [
 ];
 
 // ---- 2. Game state ----
-let order = [];        // shuffled copy of questions for this playthrough
-let qIndex = 0;        // which question we're on
+let order = [];
+let qIndex = 0;
 let score = 0;
-let answered = false;  // guards against double-answering one question
-let currentRunner = null; // the button element currently dodging the cursor
+let answered = false;
+let currentRunner = null;
 
-// ---- 3. Sound engine (Web Audio API — no audio files needed) ----
+// ---- 3. Sound engine ----
 let audioCtx = null;
 function ctx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -32,15 +30,15 @@ function ctx() {
 function beep(freq, dur, type, vol) {
   try {
     const c = ctx();
-    const osc = c.createOscillator();   // generates the tone
-    const gain = c.createGain();        // controls volume/fade-out
+    const osc = c.createOscillator();
+    const gain = c.createGain();
     osc.type = type || 'sine';
-    osc.frequency.value = freq;         // pitch in Hz
+    osc.frequency.value = freq;
     gain.gain.value = vol || 0.12;
     osc.connect(gain);
-    gain.connect(c.destination);        // destination = speakers
+    gain.connect(c.destination);
     osc.start();
-    gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur); // fade out
+    gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
     osc.stop(c.currentTime + dur);
   } catch (e) { /* audio can fail silently, game still works */ }
 }
@@ -53,7 +51,7 @@ const sfx = {
 };
 
 // ---- 4. Per-question countdown timer ----
-const QUESTION_TIME = 15000; // ms
+const QUESTION_TIME = 15000;
 let timerRAF = null;
 const timerFill = document.getElementById('timerFill');
 
@@ -81,7 +79,7 @@ function stopTimer() {
   timerRAF = null;
 }
 
-// ---- 5. Leaderboard (in-memory for now; swap to localStorage once deployed) ----
+// ---- 5. Leaderboard ----
 let leaderboard = [];
 function renderLeaderboard() {
   const list = document.getElementById('leaderboardList');
@@ -95,7 +93,7 @@ function renderLeaderboard() {
   ).join('');
 }
 
-// ---- 6. Grab DOM elements once ----
+// ---- 6. DOM elements ----
 const card = document.getElementById('card');
 const btnYes = document.getElementById('btnYes');
 const btnNo = document.getElementById('btnNo');
@@ -131,8 +129,6 @@ function flash(kind) {
   setTimeout(() => flashEl.className = 'flash', 400);
 }
 
-// Finds a random on-screen spot for the runner button, biased away from
-// a given point (the cursor) and never overlapping the question card.
 function randomPos(el, avoidX, avoidY) {
   const margin = 12;
   const cardRect = card.getBoundingClientRect();
@@ -142,7 +138,6 @@ function randomPos(el, avoidX, avoidY) {
   const maxY = window.innerHeight - h - margin;
   let best = null, bestDist = -1;
 
-  // Sample several candidate spots and keep the one farthest from the cursor
   for (let tries = 0; tries < 10; tries++) {
     const x = margin + Math.random() * (maxX - margin);
     const y = margin + Math.random() * (maxY - margin);
@@ -151,4 +146,140 @@ function randomPos(el, avoidX, avoidY) {
     if (overlapsCard) continue;
     const cx = x + w / 2, cy = y + h / 2;
     const dist = (avoidX == null) ? Math.random() : Math.hypot(cx - avoidX, cy - avoidY);
-    if (dist > bestDist) { bestDist =
+    if (dist > bestDist) { bestDist = dist; best = { x, y }; }
+  }
+  if (!best) best = { x: margin, y: margin };
+  return best;
+}
+
+function placeAt(el, x, y) {
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+}
+
+function moveRunnerAwayFrom(el, avoidX, avoidY) {
+  const pos = randomPos(el, avoidX, avoidY);
+  placeAt(el, pos.x, pos.y);
+}
+
+// ---- 8. Cursor-proximity dodge ----
+const DODGE_RADIUS = 110;
+
+function handlePointerMove(clientX, clientY) {
+  if (answered || !currentRunner) return;
+  const rect = currentRunner.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dist = Math.hypot(clientX - cx, clientY - cy);
+  if (dist < DODGE_RADIUS) {
+    moveRunnerAwayFrom(currentRunner, clientX, clientY);
+  }
+}
+
+document.addEventListener('mousemove', (e) => handlePointerMove(e.clientX, e.clientY));
+document.addEventListener('touchmove', (e) => {
+  if (e.touches && e.touches[0]) {
+    handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+  }
+}, { passive: true });
+
+// ---- 9. Core game loop ----
+function loadQuestion() {
+  if (qIndex >= order.length) { endGame(); return; }
+
+  answered = false;
+  const item = order[qIndex];
+  questionEl.textContent = item.q;
+  qnumEl.textContent = qIndex + 1;
+
+  btnYes.classList.remove('runner', 'decoy');
+  btnNo.classList.remove('runner', 'decoy');
+
+  const yesIsRunner = item.a === true;
+  const runnerBtn = yesIsRunner ? btnYes : btnNo;
+  const stillBtn = yesIsRunner ? btnNo : btnYes;
+
+  runnerBtn.classList.add('runner');
+  stillBtn.classList.add('decoy');
+  currentRunner = runnerBtn;
+
+  const w = runnerBtn.offsetWidth || 110;
+  const startX = window.innerWidth / 2 - w / 2;
+  const startY = window.innerHeight - 140;
+
+  placeAt(stillBtn, startX, startY);
+  placeAt(runnerBtn, startX, startY);
+
+  stopTimer();
+  startTimer(() => {
+    if (answered) return;
+    answered = true;
+    sfx.timeup();
+    flash('miss');
+    showToast('Too slow ✗');
+    qIndex++;
+    setTimeout(loadQuestion, 550);
+  });
+}
+
+function handleClick(clicked) {
+  if (answered) return;
+  answered = true;
+  stopTimer();
+
+  const isRunner = clicked.classList.contains('runner');
+
+  if (isRunner) {
+    score++;
+    scoreEl.textContent = score;
+    sfx.catch();
+    flash('hit');
+    showToast('Caught it ✓');
+  } else {
+    sfx.miss();
+    flash('miss');
+    showToast("Nope — wrong answer ✗");
+  }
+
+  qIndex++;
+  setTimeout(loadQuestion, 550);
+}
+
+btnYes.addEventListener('click', () => handleClick(btnYes));
+btnNo.addEventListener('click', () => handleClick(btnNo));
+
+// ---- 10. Start / end screens ----
+function startGame() {
+  ctx();
+  order = shuffle(questions);
+  qIndex = 0;
+  score = 0;
+  scoreEl.textContent = 0;
+  startOverlay.classList.add('hidden');
+  endOverlay.classList.add('hidden');
+  document.getElementById('nameInput').disabled = false;
+  document.getElementById('saveScoreBtn').disabled = false;
+  loadQuestion();
+}
+
+function endGame() {
+  stopTimer();
+  currentRunner = null;
+  sfx.win();
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('finalTotal').textContent = questions.length;
+  document.getElementById('nameInput').value = '';
+  renderLeaderboard();
+  endOverlay.classList.remove('hidden');
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+document.getElementById('saveScoreBtn').addEventListener('click', () => {
+  const input = document.getElementById('nameInput');
+  const name = (input.value || 'player').trim().slice(0, 12) || 'player';
+  leaderboard.push({ name, score });
+  input.disabled = true;
+  document.getElementById('saveScoreBtn').disabled = true;
+  renderLeaderboard();
+});
