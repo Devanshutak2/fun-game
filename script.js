@@ -53,7 +53,7 @@ const sfx = {
 };
 
 // ---- 4. Per-question countdown timer ----
-const QUESTION_TIME = 7000; // ms
+const QUESTION_TIME = 15000; // ms
 let timerRAF = null;
 const timerFill = document.getElementById('timerFill');
 
@@ -235,18 +235,27 @@ function loadQuestion() {
 
 function handleClick(clicked) {
   if (answered) return;
+  answered = true;
+  stopTimer();
+
   const isRunner = clicked.classList.contains('runner');
 
   if (isRunner) {
-    answered = true;
-    stopTimer();
     score++;
     scoreEl.textContent = score;
     sfx.catch();
     flash('hit');
     showToast('Caught it ✓');
-    qIndex++;
-    setTimeout(loadQuestion, 550);
+  } else {
+    // Clicking the decoy now counts as a wrong answer and moves on
+    sfx.miss();
+    flash('miss');
+    showToast("Nope — wrong answer ✗");
+  }
+
+  qIndex++;
+  setTimeout(loadQuestion, 550);
+}
   } else {
     // Clicking the decoy does nothing except a little negative feedback
     sfx.miss();
