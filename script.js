@@ -53,7 +53,7 @@ const sfx = {
 };
 
 // ---- 4. Per-question countdown timer ----
-const QUESTION_TIME = 5000; // ms
+const QUESTION_TIME = 7000; // ms
 let timerRAF = null;
 const timerFill = document.getElementById('timerFill');
 
