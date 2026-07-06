@@ -4,7 +4,7 @@
 
 // ---- 1. Question data ----
 // Each question has one correct answer (true = Yes, false = No).
-// The button matching `a` becomes the "runner" that dodges clicks.
+// The button matching `a` becomes the "runner" that dodges the cursor.
 const questions = [
   { q: "Is the sky blue on a clear day?", a: true },
   { q: "Can a square have five sides?", a: false },
@@ -17,11 +17,11 @@ const questions = [
 ];
 
 // ---- 2. Game state ----
-let order = [];       // shuffled copy of questions for this playthrough
-let qIndex = 0;       // which question we're on
+let order = [];        // shuffled copy of questions for this playthrough
+let qIndex = 0;        // which question we're on
 let score = 0;
-let roamTimer = null; // setInterval handle for the runner button
-let answered = false; // guards against double-answering one question
+let answered = false;  // guards against double-answering one question
+let currentRunner = null; // the button element currently dodging the cursor
 
 // ---- 3. Sound engine (Web Audio API — no audio files needed) ----
 let audioCtx = null;
@@ -131,43 +131,66 @@ function flash(kind) {
   setTimeout(() => flashEl.className = 'flash', 400);
 }
 
-// Finds a random on-screen spot for a button that doesn't overlap the question card
-function randomPos(el) {
+// Finds a random on-screen spot for the runner button, biased away from
+// a given point (the cursor) and never overlapping the question card.
+function randomPos(el, avoidX, avoidY) {
   const margin = 12;
   const cardRect = card.getBoundingClientRect();
   const w = el.offsetWidth || 110;
   const h = el.offsetHeight || 54;
   const maxX = window.innerWidth - w - margin;
   const maxY = window.innerHeight - h - margin;
-  let x, y, tries = 0;
-  do {
-    x = margin + Math.random() * (maxX - margin);
-    y = margin + Math.random() * (maxY - margin);
-    tries++;
-  } while (
-    tries < 12 &&
-    x < cardRect.right + margin && x + w > cardRect.left - margin &&
-    y < cardRect.bottom + margin && y + h > cardRect.top - margin
-  );
-  return { x, y };
+  let best = null, bestDist = -1;
+
+  // Sample several candidate spots and keep the one farthest from the cursor
+  for (let tries = 0; tries < 10; tries++) {
+    const x = margin + Math.random() * (maxX - margin);
+    const y = margin + Math.random() * (maxY - margin);
+    const overlapsCard = x < cardRect.right + margin && x + w > cardRect.left - margin &&
+                          y < cardRect.bottom + margin && y + h > cardRect.top - margin;
+    if (overlapsCard) continue;
+    const cx = x + w / 2, cy = y + h / 2;
+    const dist = (avoidX == null) ? Math.random() : Math.hypot(cx - avoidX, cy - avoidY);
+    if (dist > bestDist) { bestDist = dist; best = { x, y }; }
+  }
+  if (!best) best = { x: margin, y: margin }; // fallback, should rarely happen
+  return best;
 }
 
-function placeStill(el, x, y) {
+function placeAt(el, x, y) {
   el.style.left = x + 'px';
   el.style.top = y + 'px';
 }
 
-function moveRunner(el) {
-  const pos = randomPos(el);
-  el.style.left = pos.x + 'px';
-  el.style.top = pos.y + 'px';
+function moveRunnerAwayFrom(el, avoidX, avoidY) {
+  const pos = randomPos(el, avoidX, avoidY);
+  placeAt(el, pos.x, pos.y);
 }
 
-function stopRoam() {
-  if (roamTimer) { clearInterval(roamTimer); roamTimer = null; }
+// ---- 8. Cursor-proximity dodge ----
+// The runner button only jumps once the cursor gets within DODGE_RADIUS of
+// its center. This makes it feel "unclickable" rather than just randomly moving.
+const DODGE_RADIUS = 110;
+
+function handlePointerMove(clientX, clientY) {
+  if (answered || !currentRunner) return;
+  const rect = currentRunner.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dist = Math.hypot(clientX - cx, clientY - cy);
+  if (dist < DODGE_RADIUS) {
+    moveRunnerAwayFrom(currentRunner, clientX, clientY);
+  }
 }
 
-// ---- 8. Core game loop ----
+document.addEventListener('mousemove', (e) => handlePointerMove(e.clientX, e.clientY));
+document.addEventListener('touchmove', (e) => {
+  if (e.touches && e.touches[0]) {
+    handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+  }
+}, { passive: true });
+
+// ---- 9. Core game loop ----
 function loadQuestion() {
   if (qIndex >= order.length) { endGame(); return; }
 
@@ -186,26 +209,22 @@ function loadQuestion() {
 
   runnerBtn.classList.add('runner');
   stillBtn.classList.add('decoy');
+  currentRunner = runnerBtn;
 
-  // Place the still (decoy) button near the bottom, runner somewhere random
-  const stillX = window.innerWidth / 2 - (stillBtn.offsetWidth || 110) / 2 - (yesIsRunner ? 90 : -90);
-  const stillY = window.innerHeight - 140;
-  placeStill(stillBtn, Math.max(20, Math.min(stillX, window.innerWidth - 140)), stillY);
+  // Both buttons start stacked at the SAME spot, side by side near the
+  // bottom center. The still button never moves from here; the runner
+  // only leaves once the cursor gets close.
+  const w = runnerBtn.offsetWidth || 110;
+  const startX = window.innerWidth / 2 - w / 2;
+  const startY = window.innerHeight - 140;
 
-  moveRunner(runnerBtn);
-
-  stopRoam();
-  const speed = 950; // ms between jumps — lower = harder
-  roamTimer = setInterval(() => {
-    if (answered) return;
-    moveRunner(runnerBtn);
-  }, speed);
+  placeAt(stillBtn, startX, startY);
+  placeAt(runnerBtn, startX, startY);
 
   stopTimer();
   startTimer(() => {
     if (answered) return;
     answered = true;
-    stopRoam();
     sfx.timeup();
     flash('miss');
     showToast('Too slow ✗');
@@ -220,7 +239,6 @@ function handleClick(clicked) {
 
   if (isRunner) {
     answered = true;
-    stopRoam();
     stopTimer();
     score++;
     scoreEl.textContent = score;
@@ -240,7 +258,7 @@ function handleClick(clicked) {
 btnYes.addEventListener('click', () => handleClick(btnYes));
 btnNo.addEventListener('click', () => handleClick(btnNo));
 
-// ---- 9. Start / end screens ----
+// ---- 10. Start / end screens ----
 function startGame() {
   ctx(); // unlock audio — browsers require a user gesture first
   order = shuffle(questions);
@@ -255,8 +273,8 @@ function startGame() {
 }
 
 function endGame() {
-  stopRoam();
   stopTimer();
+  currentRunner = null;
   sfx.win();
   document.getElementById('finalScore').textContent = score;
   document.getElementById('finalTotal').textContent = questions.length;
