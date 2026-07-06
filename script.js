@@ -183,6 +183,21 @@ document.addEventListener('touchmove', (e) => {
   }
 }, { passive: true });
 
+// On touchscreens there's no "hovering near" a button before you tap it —
+// your finger just lands directly on it. So instead we intercept the tap
+// itself: if you touch the runner button, it dodges away and the tap is
+// cancelled (never registers as a catch). The decoy button still works
+// normally since it's not the runner.
+function handleRunnerTouchStart(e) {
+  if (answered) return;
+  if (!e.currentTarget.classList.contains('runner')) return; // let decoy taps through normally
+  e.preventDefault(); // stops the click event from also firing
+  const touch = e.touches[0];
+  moveRunnerAwayFrom(e.currentTarget, touch.clientX, touch.clientY);
+}
+btnYes.addEventListener('touchstart', handleRunnerTouchStart, { passive: false });
+btnNo.addEventListener('touchstart', handleRunnerTouchStart, { passive: false });
+
 // ---- 9. Core game loop ----
 function loadQuestion() {
   if (qIndex >= order.length) { endGame(); return; }
